@@ -8,7 +8,6 @@
 // Components
 #include <SD.h>
 #define SPI_SD_SS  10
-#define SPI_Rad_SS 7
 File SD_file;
 File csv_file;
 
@@ -37,7 +36,7 @@ LIS3DH lis3dh(I2C_MODE, LIS3DH_I2C_ADDRESS);
 #include <Adafruit_BMP280.h>
 #define SEALEVELPRESSURE_HPA (1013.25)
 #define BMP280_I2C_ADDRESS 0x76
-Adafruit_BMP280 bmp_280(&Wire);
+Adafruit_BMP280 bmp_280; //(&Wire)
 
 
 #include <SoftwareSerial.h>
@@ -53,6 +52,7 @@ TinyGPS gps;
 uint8_t gps_enabled = false;
 SoftwareSerial gps_serial(GPS_SERIAL_RX, GPS_SERIAL_TX);
 
+#define LOG_MINUTES 5
 
 //868MHz
 
@@ -110,7 +110,7 @@ struct data_t // 26 Bytes
     uint16_t flags;
 };
 
-#define BUFFER_SIZE 4
+#define BUFFER_SIZE 1
 uint8_t buffer_element_position = 0;
 
 /*
@@ -418,8 +418,8 @@ void init_bmp280(void)
 {
     Serial.print("BMP_280 Init begun: ");
 
-    print_status(
-        (uint8_t)bmp_280.begin(BMP280_I2C_ADDRESS)
+    print_status((uint8_t)
+        bmp_280.begin(BMP280_I2C_ADDRESS)
     );
 }
 
@@ -530,7 +530,7 @@ struct location_t get_location(void)
 
 void translate_data_to_csv()
 {
-    SD_file = SD.open("asd.txt");
+    SD_file = SD.open("asd.txt", O_READ);
     csv_file = SD.open("real.txt", FILE_WRITE);
 
     if (!SD_file)
@@ -616,6 +616,7 @@ float wait_for_launch()
 void test_log_10_seconds()
 {
     open_raw_file();
+    //open_raw_file_random_name();
 
     unsigned long t1 = millis();
     unsigned long t2 = millis();
@@ -625,7 +626,7 @@ void test_log_10_seconds()
     float pressure = 0;
     float altitude = 0;
 
-    while(t2 - t1 < 10000)
+    while(t2 - t1 < 60000 * LOG_MINUTES)
     {
         struct data_t data;
 
@@ -674,9 +675,13 @@ void test_log_10_seconds()
 
 void log_data_forever()
 {
+    open_raw_file();
+
     unsigned long time_of_barometer_last_reading = 0;
     float pressure = 0;
     float altitude = 0;
+
+    unsigned long t1 = millis();
 
     while(true)
     {
@@ -713,13 +718,24 @@ void log_data_forever()
             store_buffer();
             buffer_element_position = 0;
         }
+
+        if (millis() - t1 > 10000)
+        {
+            close_file();
+            delay(10);
+            open_raw_file();
+            t1 = millis();
+        }
     }
+
+    close_file();
 }
 
 void setup() 
 {
     delay(2000); // Just for test purposes
-    Serial.begin(115200);
+    Serial.begin(9600); // 115200
+    Serial.println("Start...");
     Wire.begin();
 
     //----- Init the sensors -----
@@ -731,20 +747,39 @@ void setup()
 
     //init_gps();
 
-    // if (SD.remove("asd.txt") == true)
-    // {
-    //     Serial.println("File removed successfully");
-    // }
+    if (SD.remove("asd.txt") == true)
+    {
+        Serial.println("File removed successfully");
+    }
 
     Wire.setClock(1000000);
     SPI.setClockDivider(SPI_CLOCK_DIV2);
+
+    delay(10000);
+    Serial.println("Start");
 }
 
 void loop() 
 {
-    open_raw_file_random_name();
-    log_data_forever();
-    close_file();
+    
+    //delay(1000);
+    
+    //open_raw_file();
+    test_log_10_seconds();
+
+    //Serial.println("End Logging");
+
+
+    //open_raw_file_random_name();
+    //log_data_forever();
+    //close_file();
+
+    //translate_data_to_csv();
 
     // translate_data_to_csv();
+
+    // Serial.println("End Translation");
+    //delay(1000);
+
+    while(1);
 }
